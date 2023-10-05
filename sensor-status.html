@@ -415,10 +415,11 @@
 <script>
   // MQTT Configuration
   const clientId = "webClient_" + parseInt(Math.random() * 100, 10);
-  const host = "broker.hivemq.com";
-  const port = 8000; // Changed to WebSocket port
+  const host = "wss://broker.hivemq.com:8000/mqtt";
+  const port = 8000;
 
-  const client = new Paho.MQTT.Client(host, port, "/mqtt", clientId); // Added path for WebSocket
+  const client = new Paho.MQTT.Client("broker.hivemq.com", 8000, "/mqtt", clientId);
+
 
   client.onConnectionLost = onConnectionLost;
   client.onMessageArrived = onMessageArrived;
@@ -433,11 +434,12 @@
     client.subscribe("lightStatus/livingRoom");
   }
 
-  function onConnectionLost(responseObject) {
+  client.onConnectionLost = function (responseObject) {
     if (responseObject.errorCode !== 0) {
-      console.log("Connection Lost: " + responseObject.errorMessage);
+        console.error("Connection lost:", responseObject.errorMessage);
     }
-  }
+};
+
 
   function onMessageArrived(message) {
     const topic = message.destinationName;
