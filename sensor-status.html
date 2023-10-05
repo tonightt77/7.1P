@@ -415,15 +415,18 @@
 <script>
   // MQTT Configuration
   const clientId = "webClient_" + parseInt(Math.random() * 100, 10);
-  const host = "mqtt://broker.hivemq.com";
-  const port = 1883;
+  const host = "broker.hivemq.com";
+  const port = 8000; // Changed to WebSocket port
 
-  const client = new Paho.MQTT.Client(host, port, clientId);
+  const client = new Paho.MQTT.Client(host, port, "/mqtt", clientId); // Added path for WebSocket
 
   client.onConnectionLost = onConnectionLost;
   client.onMessageArrived = onMessageArrived;
 
-  client.connect({onSuccess: onConnect});
+  client.connect({
+    onSuccess: onConnect,
+    useSSL: true // Use SSL for secure connection
+  });
 
   function onConnect() {
     console.log("Connected to MQTT Broker");
@@ -441,7 +444,7 @@
     const payload = message.payloadString;
 
     if (topic === "lightStatus/livingRoom") {
-      document.getElementById("lightStatusLivingRoom").textContent = payload;
+      document.getElementById("lightStatusLivingRoom").textContent = payload === 'on' ? 'On' : 'Off';
     }
     // Handle other topics as needed
   }
@@ -451,8 +454,10 @@
     const message = new Paho.MQTT.Message(action);
     message.destinationName = topic;
     client.send(message);
+    console.log(`Sent command to turn ${action} the light in the ${room}.`);
   }
 </script>
+
 </body>
 
 </html>
