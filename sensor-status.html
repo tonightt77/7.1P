@@ -361,25 +361,19 @@
 
     <section class="section">
       <div class="row">
-        <div class="col-lg-12">
-          <div class="card">
-            <div class="card-body">
-              <h5 class="card-title">Light Control</h5>
-              <div class="sensor-status">
-                <div class="sensor-item">
-                  <h6>Light - Living Room</h6>
-                  <p>Status: <span class="status text-success" id="lightStatusLivingRoom">Off</span></p>
-                  <button class="btn btn-success" onclick="controlLight('livingRoom', 'on')">Turn On</button>
-                  <button class="btn btn-danger" onclick="controlLight('livingRoom', 'off')">Turn Off</button>
-                </div>
-                <hr>
-                <!-- Add more light controls as needed -->
-              </div>
-            </div>
-          </div>      
-        </div>
+          <div class="col-lg-12">
+              <div class="card">
+                  <div class="card-body">
+                      <h5 class="card-title">Light Control</h5>
+                      <div class="sensor-status">
+                          <!-- Light Control Divs will be added here -->
+                      </div>
+                  </div>
+              </div>      
+          </div>
       </div>
-    </section>
+  </section>
+  
 
     
 
@@ -415,50 +409,188 @@
 <script>
   // MQTT Configuration
   const clientId = "webClient_" + parseInt(Math.random() * 100, 10);
-  const host = "wss://broker.hivemq.com:8000/mqtt";
+  const host = "ws://broker.hivemq.com:8000/mqtt";
   const port = 8000;
 
   const client = new Paho.MQTT.Client("broker.hivemq.com", 8000, "/mqtt", clientId);
-
 
   client.onConnectionLost = onConnectionLost;
   client.onMessageArrived = onMessageArrived;
 
   client.connect({
     onSuccess: onConnect,
-    useSSL: true // Use SSL for secure connection
+    useSSL: false // Set to false for non-secure connection
   });
 
   function onConnect() {
     console.log("Connected to MQTT Broker");
-    client.subscribe("lightStatus/livingRoom");
+    //client.subscribe("lightStatus/office"); 
+    client.subscribe("lightControl/switch"); // Subscribe to status messages
+    client.subscribe("lightControl/brightness"); // Subscribe to brightness messages
+    client.subscribe("lightControl/colorTemp"); // Subscribe to color temperature messages
   }
 
-  client.onConnectionLost = function (responseObject) {
+  function onConnectionLost(responseObject) {
     if (responseObject.errorCode !== 0) {
         console.error("Connection lost:", responseObject.errorMessage);
     }
-};
-
-
-  function onMessageArrived(message) {
-    const topic = message.destinationName;
-    const payload = message.payloadString;
-
-    if (topic === "lightStatus/livingRoom") {
-      document.getElementById("lightStatusLivingRoom").textContent = payload === 'on' ? 'On' : 'Off';
-    }
-    // Handle other topics as needed
   }
 
-  function controlLight(room, action) {
-    const topic = "controlLight/" + room;
-    const message = new Paho.MQTT.Message(action);
+    function onMessageArrived(message) {
+      const topic = message.destinationName;
+      console.log("Received message on topic:", topic);
+      const payload = JSON.parse(message.payloadString);
+
+      if (topic === "lightControl/switch") {
+        alert(`Light has been turned ${payload.lightStatus}`);
+        updateUI(payload);
+      } else if (topic === "lightControl/brightness") {
+        alert(`Light brightness has been updated to ${payload.brightness}`);
+        updateUI(payload);
+      }
+      else if (topic === "lightControl/colorTemp") {
+        alert(`Light color temperature has been updated to ${payload.colorTemp}`);
+        updateUI(payload);
+      }
+    }
+
+    function fetchLightData() {
+    fetch('http://localhost:3000/getAllLights')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+          console.log(data); 
+            const sensorStatusDiv = document.querySelector('.sensor-status');
+            sensorStatusDiv.innerHTML = ''; // Clear any existing light controls
+
+            data.forEach(lightData => {
+                const sensorItemDiv = createLightControlDiv(lightData);
+                sensorStatusDiv.appendChild(sensorItemDiv);
+            });
+        })
+        .catch(error => {
+            console.error("Error fetching data:", error);
+        });
+}
+
+function createLightControlDiv(lightData) {
+    const div = document.createElement('div');
+    div.className = 'sensor-item';
+
+    div.innerHTML = `
+        <h6>Light - ${lightData.office}</h6>
+        <p>Status: <span class="status text-success" id="lightStatus${lightData._id}">${lightData.lightStatus === 'on' ? 'On' : 'Off'}</span></p>
+        <p>Brightness: <span id="brightnessDisplay${lightData._id}">${lightData.brightness}</span>%</p>
+        <input type="range" id="brightnessSlider${lightData._id}" min="1" max="100" value="${lightData.brightness}" onchange="updateBrightness(this.value)">
+        <p>Color Temperature: <span id="colorTempDisplay${lightData._id}">${lightData.colorTemp}</span>K</p>
+        <input type="range" id="colorTempSlider${lightData._id}" min="2000" max="6500" value="${lightData.colorTemp}" onchange="updateColorTemp(this.value)">
+        <button class="btn btn-success" onclick="controlLight('${lightData._id}', 'on')">Turn On</button>
+        <button class="btn btn-danger" onclick="controlLight('${lightData._id}', 'off')">Turn Off</button>
+        <hr>
+    `;
+
+    return div;
+}
+
+
+
+function controlLight(lightId, action) {
+    const topic = "lightControl/switch";
+
+    const messageData = {
+        lightId: lightId,
+        lightStatus: action
+    };
+
+    const message = new Paho.MQTT.Message(JSON.stringify(messageData));
     message.destinationName = topic;
     client.send(message);
-    console.log(`Sent command to turn ${action} the light in the ${room}.`);
-  }
+    console.log(`Sent command to turn ${action} the light with ID ${lightId}.`);
+}
+
+
+function updateBrightness(value) {
+    const slider = event.target; // Get the slider that triggered the event
+    const lightId = slider.id.replace("brightnessSlider", ""); // Extract the light's object ID from the slider's ID
+    const displayElement = document.getElementById("brightnessDisplay" + lightId);
+
+    if (!displayElement) {
+        console.error(`Brightness display for light ID ${lightId} not found.`);
+        return;
+    }
+
+    displayElement.textContent = value;
+
+    // Send the updated brightness value to the MQTT broker
+    const topic = "lightControl/brightness";
+    const messageData = {
+        lightId: lightId,
+        brightness: parseInt(value, 10) // Convert the value to an integer
+    };
+
+    const message = new Paho.MQTT.Message(JSON.stringify(messageData));
+    message.destinationName = topic;
+    client.send(message);
+    console.log(`Sent updated brightness value for light with ID ${lightId}.`);
+}
+
+
+function updateColorTemp(value) {
+    const slider = event.target; // Get the slider that triggered the event
+    const lightId = slider.id.replace("colorTempSlider", ""); // Extract the light's object ID from the slider's ID
+    const displayElement = document.getElementById("colorTempDisplay" + lightId);
+
+    if (!displayElement) {
+        console.error(`Color temperature display for light ID ${lightId} not found.`);
+        return;
+    }
+
+    displayElement.textContent = value;
+
+    // Send the updated color temperature value to the MQTT broker
+    const topic = "lightControl/colorTemp";
+    const messageData = {
+        lightId: lightId,
+        colorTemp: parseInt(value, 10) // Convert the value to an integer
+    };
+
+    const message = new Paho.MQTT.Message(JSON.stringify(messageData));
+    message.destinationName = topic;
+    client.send(message);
+    console.log(`Sent updated color temperature value for light with ID ${lightId}.`);
+}
+
+
+function updateUI(lightData) {
+    const lightId = lightData.lightId;
+
+    if (lightData.hasOwnProperty('lightStatus')) {
+        document.getElementById(`lightStatus${lightId}`).textContent = lightData.lightStatus === 'on' ? 'On' : 'Off';
+    }
+
+    if (lightData.hasOwnProperty('brightness')) {
+        document.getElementById(`brightnessDisplay${lightId}`).textContent = lightData.brightness;
+        document.getElementById(`brightnessSlider${lightId}`).value = lightData.brightness;
+    }
+
+    if (lightData.hasOwnProperty('colorTemp')) {
+        document.getElementById(`colorTempDisplay${lightId}`).textContent = lightData.colorTemp;
+        document.getElementById(`colorTempSlider${lightId}`).value = lightData.colorTemp;
+    }
+}
+
+
+
+fetchLightData();
+
+
 </script>
+
+
 
 </body>
 
