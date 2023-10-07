@@ -423,8 +423,7 @@
   });
 
   function onConnect() {
-    console.log("Connected to MQTT Broker");
-    //client.subscribe("lightStatus/office"); 
+    console.log("Connected to MQTT Broker"); 
     client.subscribe("lightControl/switch"); // Subscribe to status messages
     client.subscribe("lightControl/brightness"); // Subscribe to brightness messages
     client.subscribe("lightControl/colorTemp"); // Subscribe to color temperature messages
@@ -455,7 +454,7 @@
     }
 
     function fetchLightData() {
-    fetch('http://localhost:3000/getAllLights')
+    fetch('http://3.89.205.222:3000/getAllLights')
         .then(response => {
             if (!response.ok) {
                 throw new Error('Network response was not ok');
